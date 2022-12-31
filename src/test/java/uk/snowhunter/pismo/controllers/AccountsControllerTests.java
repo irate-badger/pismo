@@ -8,10 +8,11 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import uk.snowhunter.pismo.domain.AccountDo;
-import uk.snowhunter.pismo.entities.Account;
+import uk.snowhunter.pismo.domain.Account;
+import uk.snowhunter.pismo.entities.AccountEntity;
 import uk.snowhunter.pismo.exceptions.InvalidAccountException;
-import uk.snowhunter.pismo.respository.AccountsRepository;
+import uk.snowhunter.pismo.exceptions.InvalidRequestException;
+import uk.snowhunter.pismo.respository.AccountRepository;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -22,25 +23,24 @@ import static org.mockito.Mockito.when;
 public class AccountsControllerTests {
 
     @Mock
-    AccountsRepository accountsRepository;
+    AccountRepository accountsRepository;
 
     @InjectMocks
     AccountsController accountsController;
 
-    // Happy path of getting an existing account
     @Test
-    void testGet() throws Exception {
-        when(accountsRepository.findByAccountNumber(1L))
-            .thenReturn(new Account().setAccountNumber(1L).setDocumentNumber("ABC123"));
+    void testGetAccountsController_success() throws Exception {
+        when(accountsRepository.findByAccountId(1L))
+            .thenReturn(new AccountEntity().setAccountId(1L).setDocumentNumber("ABC123"));
 
-        AccountDo dto = accountsController.get(Optional.of(1L));
-        assertEquals(1L, dto.getAccountNumber());
+        Account dto = accountsController.get(Optional.of(1L));
+        assertEquals(1L, dto.getAccountId());
         assertEquals("ABC123", dto.getDocumentNumber());
     }
 
-    // When an invalid value is passed, no account number is set. This will raise a null pointer (to be managed in error handler)
+    // When an invalid value is passed, no account number is set. This will raise an invalid account error (to be managed in error handler)
     @Test
-    void testGet_withNoAccountNumberSet() {
+    void testGetAccountsController_noAccountNumberThrowsException() {
         assertThrows(InvalidAccountException.class,
                      () -> accountsController.get(Optional.empty()),
                      "Expected controller to throw InvalidAccountException, but it didn't");
@@ -48,8 +48,8 @@ public class AccountsControllerTests {
 
     // When a valid value is passed but no account is present, this will raise a nullpointer (to be managed in error handler)
     @Test
-    void testGet_withInvalidAccountNumberSet() {
-        when(accountsRepository.findByAccountNumber(5L))
+    void testGetAccountsController_invalidAccountNumberThrowsException() {
+        when(accountsRepository.findByAccountId(5L))
             .thenThrow(new NullPointerException());
 
         assertThrows(NullPointerException.class,
@@ -59,23 +59,29 @@ public class AccountsControllerTests {
 
     // Happy path of creating a new account
     @Test
-    void testPost() {
-        when(accountsRepository.save(any(Account.class)))
-            .thenReturn(new Account().setAccountNumber(1L).setDocumentNumber("ABC123"));
+    void testPostAccountsController_success() {
+        when(accountsRepository.save(any(AccountEntity.class)))
+            .thenReturn(new AccountEntity().setAccountId(1L).setDocumentNumber("ABC123"));
 
-        AccountDo dto = accountsController.post(new AccountDo().setAccountNumber(1L).setDocumentNumber("ABC123"));
-        assertEquals(1L, dto.getAccountNumber());
+        Account dto = accountsController.post(new Account().setDocumentNumber("ABC123"));
+        assertEquals(1L, dto.getAccountId());
         assertEquals("ABC123", dto.getDocumentNumber());
     }
 
     // When no document number is set then this returns an error
     @Test
-    void testPost_missingDocumentNumberReturnsError() {
-        assertThrows(InvalidAccountException.class,
-                     () -> accountsController.get(Optional.empty()),
-                     "Expected controller to throw InvalidAccountException, but it didn't");
+    void testPostAccountsController_missingDocumentNumberReturnsError() {
+        assertThrows(InvalidRequestException.class,
+                     () -> accountsController.post(new Account()),
+                     "Expected controller to throw InvalidRequestException, but it didn't");
     }
 
     // When an account number is set, this returns an error
+    @Test
+    void testPostAccountsController_setAccountNumberReturnsError() {
+        assertThrows(InvalidRequestException.class,
+                     () -> accountsController.post(new Account().setDocumentNumber("ABC123").setAccountId(1L)),
+                     "Expected controller to throw InvalidRequestException, but it didn't");
+    }
 
 }

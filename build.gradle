@@ -2,11 +2,16 @@ plugins {
 	id 'java'
 	id 'org.springframework.boot' version '3.0.1'
 	id 'io.spring.dependency-management' version '1.1.0'
+    id "org.springdoc.openapi-gradle-plugin" version "1.6.0"
+    id 'com.palantir.docker' version '0.33.0'
+    id "com.palantir.docker-run" version "0.33.0"
 }
 
 group = 'uk.snowhunter'
 version = '0.0.1-SNAPSHOT'
 sourceCompatibility = '17'
+targetCompatibility = '17'
+def dockerOwner = 'uk.snowhunter.pismo'
 
 repositories {
 	mavenCentral()
@@ -15,13 +20,48 @@ repositories {
 dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+	implementation 'org.springframework.boot:spring-boot-starter-validation'
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.0.2'
 	runtimeOnly 'com.h2database:h2'
 
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
-	intTestImplementation 'org.springframework.boot:spring-boot-starter-test'
-
 }
 
 tasks.named('test') {
 	useJUnitPlatform()
+}
+
+// makes BuildProperties available from Spring context
+springBoot {
+    buildInfo()
+}
+
+// takes templatized Dockerfile, places into buildDir
+tasks.register('prepareDockerfileTemplate', Copy) {
+  from "src/main/resources/docker"
+  include "Dockerfile"
+  filter { it.replaceAll('<%=name%>', project.name) }
+  filter { it.replaceAll('<%=version%>', project.version) }
+  into "$buildDir"
+}
+
+// add explicit dependency, otherwise we get warning at console
+dockerPrepare.dependsOn bootJar
+bootJar.dependsOn prepareDockerfileTemplate
+resolveMainClassName.dependsOn(prepareDockerfileTemplate)
+
+// https://plugins.gradle.org/plugin/com.palantir.docker
+docker {
+  name "${dockerOwner}/${project.name}:${project.version}"
+  files "$buildDir/libs/${project.name}-${project.version}.jar"
+  dockerfile file("$buildDir/Dockerfile")
+}
+
+// https://plugins.gradle.org/plugin/com.palantir.docker-run
+dockerRun {
+  name "${project.name}"
+  image "${dockerOwner}/${project.name}:${project.version}"
+  ports '8080:8080'
+  clean true
+  daemonize false
 }
